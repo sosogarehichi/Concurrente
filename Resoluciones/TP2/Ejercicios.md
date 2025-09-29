@@ -5,7 +5,7 @@ Suponga que se tiene un curso con 50 alumnos. Cada alumno debe realizar una tare
 Nota: Para elegir la tarea suponga que existe una función elegir que le asigna una tarea a un alumno (esta función asignará 10 tareas diferentes entre 50 alumnos, es decir, que 5 alumnos tendrán la tarea 1, otros 5 la tarea 2 y así sucesivamente para las 10 tareas).
 
 ```c
-sem mutexListos[A] = ([A] 0); // para sincronizar el comienzo de la tarea
+sem mutexListos = 0; // para sincronizar el comienzo de la tarea --> puede ser privado pero mejor que sea sin el vector
 sem mutexTarea[A] = ([A] 0);
 sem hayNota[G] = ([G] 0);
 sem mutexCola = 1;
@@ -31,7 +31,7 @@ Process Alumno[id: 0..49]{
     numTarea = tareas[id]; // número de tarea asignado
  
 
-    P(mutexListos[id]); // espera que estén todos
+    P(mutexListos); // espera que estén todos
 
     // resuelve tarea
     tarea = resolverTarea(numTarea);
@@ -68,7 +68,7 @@ Process Profesor() {
     }
     // termina de repartir y avisa a los alumnos que pueden arrancar
         for (i=0; i<A; i++) {
-            V(mutexListos[i]);
+            V(mutexListos); // avisa 50 veces que se puede arrancar
     }
 
     while (entregas < A) {
@@ -95,13 +95,14 @@ Process Profesor() {
 ```
 
 ## Ejercicio 8
+Una fábrica de piezas metálicas debe producir T piezas por día. Para eso, cuenta con E empleados que se ocupan de producir las piezas de a una por vez. La fábrica empieza a producir una vez que todos los empleados llegaron. Mientras haya piezas por fabricar, los empleados tomarán una y la realizarán. Cada empleado puede tardar distinto tiempo en fabricar una pieza. Al finalizar el día, se debe conocer cuál es el empleado que más piezas fabricó.
+a. Implemente una solución asumiendo que T > E.
 
 ```c
 sem mutexPieza = 1;
 sem mutexFin = 1;
 sem mutexLlegada = 1; // inicializa en 1 para que el primero pueda entrar
 sem esperaInicio[E] = ([E] 0);
-sem iniciarTrabajo = 0; // en 0 porque es de señalización
 sem finJornada = 0;
 sem esperarPremio = 0;
 
@@ -110,6 +111,7 @@ int E; // cant empleados
 int T; // cant piezas
 int piezas = 0; // piezas fábricadas
 int fin = 0; // empleados que finalizaron
+int empMaxPiezas; // empleado que mas piezas hizo
 queue cola;
 
 // esperar a que lleguen todos los empleados
@@ -121,11 +123,13 @@ Process Empleado[id: 0..E-1] {
 
     // avisan que llega
     // cuando están todos le avisan a a fábrica
-    // se queda esperando que loe permitan iniciar a trabajar
+    // se queda esperando que le permitan iniciar a trabajar
 
     P(mutexLLegada);
     cantE++;
-    if (cantE == E) V(iniciarTrabajo);
+    if (cantE == E) {
+        for (i=0; i<E; i++) -> V(esperaInicio[i]); // le avisa a los demás que pueden empezar
+    }
     V(mutexLLegada);
 
     P(esperaInicio[id]);
@@ -151,20 +155,11 @@ Process Empleado[id: 0..E-1] {
     if (fin == E) V(finJornada);
     V(mutexFin);
 
-    P(esperarPremio);
 }
 
 Process Fabrica(){
     int i;
     Empleado e;
-
-    // espera a que estén todos los trabajadores
-    P(iniciarTrabajo);
-
-    // le avisa a cada uno de los trabajadores para iniciar su trabajo
-    for (i=0; i<E; i++) {
-        V(esperaInicio[i]);
-    }
 
     // fábrica pone piezas en una cola? o solo se toman?
     // espera a que terminen todos
@@ -197,9 +192,6 @@ int maiz = M;
 queue cola;
 
 process CamionTrigo[id: 0..T-1] {
-
-    P(hayEspacio);
-    P(trigo);
     
     P(mutexCola);
     push(cola,(id, "Trigo"));
@@ -209,13 +201,12 @@ process CamionTrigo[id: 0..T-1] {
 
     P(descarga[id]);
     descargar();
-
+    // descarga y se va
+    V(hayEspacio);
+    V(trigo);
 }
 
 process CamionMaiz[id: T..M-1] {
-
-    P(hayEspacio);
-    P(maiz);
     P(mutexCola);
     push(cola,(id, "Maiz"));
     V(mutexCola);
@@ -224,6 +215,9 @@ process CamionMaiz[id: T..M-1] {
 
     P(descarga[id]);
     descargar();
+    // descarga y se va
+    V(hayEspacio);
+    V(maiz);
 }
 
 process Coordinador{
@@ -241,21 +235,24 @@ process Coordinador{
         } else {
             // espera que haya camion
             P(hayCamion);
+            P(hayEspacio);
 
             P(mutexCola);
             pop(cola(id,tipo));
             V(mutexCola);
 
-            // dar permiso al camión para que descargue
-            V(descarga[id]);
             // aumenta en 1 la cantidad de camiones
             // del tipo correspondiente
             if (tipo() == "Trigo") {
+                P(trigo);
+                // dar permiso al camión para que descargue
+                V(descarga[id]);
                 cant[0]++;
-                V(trigo);
             } else {
+                P(maiz);
+                // dar permiso al camión para que descargue
+                V(descarga[id]);
                 cant[1]++;
-                V(maiz);
             }
         }
     }
@@ -276,13 +273,9 @@ process CamionTrigo[id: 0..T-1] {
 
     P(hayEspacio);
     P(trigo);
-    
-    P(mutexCola);
-    push(cola,(id, "Trigo"));
-    V(mutexCola);
-
     descargar();
     V(trigo);
+    V(hayEspacio);
 
 }
 
@@ -290,14 +283,9 @@ process CamionMaiz[id: 0..M-1] {
 
     P(hayEspacio);
     P(maiz);
-
-    P(mutexCola);
-    push(cola,(id, "Maiz"));
-    V(mutexCola);
-
     descargar();
     V(maiz);
-
+    V(hayEspacio);
 }
 ```
 
