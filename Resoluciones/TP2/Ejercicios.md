@@ -137,6 +137,8 @@ Process Empleado[id: 0..E-1] {
     // alguien podría modificar el valor de pieza mientras se consulta?
     P(mutexPieza);
     while (piezas < T) {
+        V(mutexPieza); // para evitar deadlock
+    
         // mientras haya piezas, toman una
         // luego de realizarla se suman en su variable contador
         tomarPieza();
@@ -146,6 +148,7 @@ Process Empleado[id: 0..E-1] {
         P(mutexCargar);
         cantP[id]++;
         V(mutexCargar);
+        P(mutexPieza); // para volver a leer el while
     }
     V(mutexPieza);
 
@@ -159,7 +162,6 @@ Process Empleado[id: 0..E-1] {
 
 Process Fabrica(){
     int i;
-    Empleado e;
 
     // fábrica pone piezas en una cola? o solo se toman?
     // espera a que terminen todos
@@ -168,7 +170,7 @@ Process Fabrica(){
     // determina el empleado que más piezas hizo
     // revisar:
     // podría ser
-    // empMaxPiezas = maxPiezas(cantP);,,
+    // empMaxPiezas = maxPiezas(cantP);
     empMaxPiezas = cantP.indexOf(cantP.max());
 
 }
